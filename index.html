@@ -2,7 +2,7 @@
 <!--
   Outlandish Booth Inventory — production props & set-supplies tracker.
   Single-file app: open in a browser, data lives in localStorage (booth_inventory_v1).
-  Optional: serve over HTTP next to a booth server exposing /api/inventory for group sync.
+  Optional: set SYNC_BASE_URL below to a deployed server/ instance for real-time group sync.
   Colors follow the Outlandish Style Guide 2025 v1.2.
 -->
 <html lang="en">
@@ -121,6 +121,7 @@
     <button class="ghost" onclick="autoTagAll()">🏷️ Auto-tag photos</button>
     <button class="ghost" onclick="openBrand()">✨ Booth ideas</button>
     <span id="syncDot" style="align-self:center;color:var(--muted);font-size:0.85em;white-space:nowrap">● local</span>
+    <button class="ghost" onclick="setSyncKey()">🔄 Sync key</button>
     <button class="ghost" onclick="setApiKey()">🔑 API key</button>
     <button onclick="openForm()">+ Add item</button>
     <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(event)">
@@ -873,8 +874,21 @@ async function autoTagAll(skipConfirm){
 }
 function stopTagging(){ tagAbort=true; }
 
-// ---- 2) Group sync: shared inventory through the booth server ----
-const SYNC_ON = location.protocol.indexOf('http')===0;
+// ---- 2) Group sync: shared inventory through a hosted sync server ----
+// Set once the server is deployed (see server/README or the repo README). Empty = sync disabled,
+// tool stays fully local (each browser keeps its own copy), same as before.
+const SYNC_BASE_URL = '';
+const SYNC_ON = !!SYNC_BASE_URL;
+const SYNC_KEY_STORAGE='booth_sync_key_v1';
+function getSyncKey(){ return localStorage.getItem(SYNC_KEY_STORAGE)||''; }
+function setSyncKey(){
+  if(!SYNC_ON){ alert('Group sync isn\'t configured on this deployment yet.'); return; }
+  const key=prompt('Enter the shared sync passphrase (ask whoever administers the inventory tool). Stored only in this browser.', getSyncKey());
+  if(key===null) return;
+  if(key.trim()) localStorage.setItem(SYNC_KEY_STORAGE, key.trim());
+  else localStorage.removeItem(SYNC_KEY_STORAGE);
+  syncPush();
+}
 let syncRev=-1, firstPull=true;
 function setDot(state,txt){
   const d=document.getElementById('syncDot'); if(!d) return;
@@ -895,7 +909,7 @@ function mergeItems(serverItems){
 async function syncPull(){
   if(!SYNC_ON) return;
   try{
-    const r=await fetch('/api/inventory?rev='+syncRev);
+    const r=await fetch(SYNC_BASE_URL+'/api/inventory?rev='+syncRev);
     if(!r.ok) throw new Error('http '+r.status);
     const data=await r.json();
     setDot('ok','synced');
@@ -913,9 +927,10 @@ async function syncPull(){
 async function syncPush(){
   if(!SYNC_ON) return;
   try{
-    const r=await fetch('/api/inventory',{method:'PUT',
-      headers:{'content-type':'application/json'},
+    const r=await fetch(SYNC_BASE_URL+'/api/inventory',{method:'PUT',
+      headers:{'content-type':'application/json','x-sync-key':getSyncKey()},
       body:JSON.stringify({items:items})});
+    if(r.status===401){ setDot('err','sync key needed — click 🔄 Sync key'); return; }
     if(r.ok){ const d=await r.json(); syncRev=d.rev; setDot('ok','synced'); }
   }catch(e){ setDot('err','offline'); }
 }

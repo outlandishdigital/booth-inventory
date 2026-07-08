@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: booth-inventory-sync
+    env: node
+    plan: free
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: SYNC_KEY
+        sync: false
+    healthCheckPath: /

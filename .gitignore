@@ -1,3 +1,7 @@
+# sync server runtime state (seeded from data/inventory-seed.json on boot)
+server/node_modules/
+server/data.json
+
 # OS noise
 Thumbs.db
 .DS_Store

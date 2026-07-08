@@ -20,9 +20,9 @@ Single HTML file. No build, no server, no accounts — open it in a browser and 
   (cup → mug, drinkware, tumbler…) so search finds things people call by different names.
 - **✨ Booth ideas** — give it a brand name and it picks 8–15 on-theme items from your inventory
   plus a short list worth sourcing.
-- **🔄 Group sync** *(optional)* — served over HTTP next to a booth server exposing `/api/inventory`,
-  every device merges into one shared inventory (last-write-wins per item). Opened as a plain file,
-  it stays happily local.
+- **🔄 Group sync** *(optional)* — point the app at the small server in `server/` (deploy steps
+  below) and every device merges into one shared, real-time inventory (last-write-wins per item).
+  Without it, the tool stays fully local per browser.
 
 ## Quick start
 
@@ -46,10 +46,35 @@ any key.
 `data/inventory-seed.json` is the default inventory the page seeds on first load — it's committed
 to this **public** repo, so its contents (item names, photos, and storage locations) are visible to
 anyone, not just Outlandish. To update the shared starting point, export a fresh Backup from the
-live tool and replace this file. Each visitor's own edits after that stay local to their browser
-(localStorage) unless they Backup/Restore or use group sync — they don't get pushed back here.
+live tool and replace this file.
+
+Without group sync (below), each visitor's edits after the initial seed stay local to their own
+browser and don't get pushed back here.
+
+## Group sync (real-time shared inventory)
+
+By default every browser has its own private copy. To make it one live, shared dashboard everyone's
+edits update in real time, deploy the small server in `server/` and point the app at it:
+
+1. **Deploy `server/` to Render** — click **New → Blueprint** in the Render dashboard, connect this
+   repo (`render.yaml` at the root configures it automatically), and set the `SYNC_KEY` env var to a
+   passphrase of your choosing when prompted (this gates *writes* — reads are open, matching the
+   rest of this public repo). Render gives you a URL like `https://booth-inventory-sync.onrender.com`.
+2. **Point the app at it** — set `SYNC_BASE_URL` near the top of the "Group sync" script block in
+   `index.html` to that URL, commit, and push. GitHub Pages redeploys automatically.
+3. **Share the passphrase** — anyone who needs to *edit* the shared inventory pastes it once via the
+   🔄 **Sync key** button in the header (stored in their browser only). Browsing/reading needs no key.
+
+Once configured, the sync dot in the header shows **synced** and every save pushes to the server;
+every open tab polls every 4s and merges changes (last-write-wins per item, by edit timestamp).
+
+**Known limitation:** the server persists to a local file that's seeded from
+`data/inventory-seed.json` on first boot, but a Render **redeploy** resets that file back to the
+seed snapshot (Render's free-tier disk isn't durable across deploys). Export a Backup periodically
+if you want a stronger safety net, or ask for a durable-storage upgrade if this becomes a problem.
 
 ## Stack
 
-One vanilla HTML/CSS/JS file, localStorage, optional Anthropic Claude API (vision + text), optional
-REST sync endpoint. Styled per the Outlandish Style Guide 2025 v1.2.
+Frontend: one vanilla HTML/CSS/JS file, localStorage, optional Anthropic Claude API (vision + text).
+Sync backend (optional): small Express server (`server/`), file-backed, deployed separately.
+Styled per the Outlandish Style Guide 2025 v1.2.
