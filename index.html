@@ -804,7 +804,20 @@ document.getElementById('briefOverlay').addEventListener('click',e=>{ if(e.targe
 document.getElementById('photoOverlay').addEventListener('click',e=>{ if(e.target.id==='photoOverlay') closePhotoBrief() });
 document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeForm(); closeBrief(); closePhotoBrief(); } });
 
-load(); render();
+async function seedIfNeeded(){
+  var SEED='booth_seed_v1';
+  try{
+    if(localStorage.getItem('booth_seed_version')===SEED) return;
+    if(localStorage.getItem(KEY)){ localStorage.setItem('booth_seed_version',SEED); return; }
+    const r=await fetch('data/inventory-seed.json');
+    if(!r.ok) return;
+    const data=await r.json();
+    if(!Array.isArray(data)) return;
+    localStorage.setItem(KEY, JSON.stringify(data));
+    localStorage.setItem('booth_seed_version', SEED);
+  }catch(e){ console.error('seed load failed', e); }
+}
+seedIfNeeded().then(()=>{ load(); render(); });
 </script>
 <script>
 /* ===== v2 features: AI keyword tagging, group sync, brand booth ideas ===== */

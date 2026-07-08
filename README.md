@@ -26,11 +26,13 @@ Single HTML file. No build, no server, no accounts — open it in a browser and 
 
 ## Quick start
 
-Download `index.html`, open it in Chrome or Edge. That's it.
+Open it live: **<https://outlandishdigital.github.io/booth-inventory/>** — no install, no login.
+(Or download `index.html` and open it locally in Chrome or Edge.)
 
-- Data lives in the browser's localStorage. Use **Backup** / **Restore** (JSON) to move it between
-  machines, and **Export CSV** for spreadsheets.
-- Photos are resized and stored inline, so backups carry the images too.
+On first load the page seeds itself from `data/inventory-seed.json` (the current Production
+inventory) into your browser's localStorage. After that, it's yours: edit freely, and use
+**Backup** / **Restore** (JSON) to move your copy between machines, or **Export CSV** for
+spreadsheets. Photos are resized and stored inline, so backups carry the images too.
 
 ## AI features & keys
 
@@ -41,9 +43,11 @@ any key.
 
 ## Data
 
-The `data/` folder (internal inventory exports, e.g. `inventory-seed.json`) is **gitignored** —
-inventory contents stay off GitHub. Share inventory via the Backup/Restore JSON flow or the group
-sync server, not commits.
+`data/inventory-seed.json` is the default inventory the page seeds on first load — it's committed
+to this **public** repo, so its contents (item names, photos, and storage locations) are visible to
+anyone, not just Outlandish. To update the shared starting point, export a fresh Backup from the
+live tool and replace this file. Each visitor's own edits after that stay local to their browser
+(localStorage) unless they Backup/Restore or use group sync — they don't get pushed back here.
 
 ## Stack
 
