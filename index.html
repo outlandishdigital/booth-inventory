@@ -877,7 +877,7 @@ function stopTagging(){ tagAbort=true; }
 // ---- 2) Group sync: shared inventory through a hosted sync server ----
 // Set once the server is deployed (see server/README or the repo README). Empty = sync disabled,
 // tool stays fully local (each browser keeps its own copy), same as before.
-const SYNC_BASE_URL = '';
+const SYNC_BASE_URL = 'https://texts-improvement-collection-lead.trycloudflare.com';
 const SYNC_ON = !!SYNC_BASE_URL;
 const SYNC_KEY_STORAGE='booth_sync_key_v1';
 function getSyncKey(){ return localStorage.getItem(SYNC_KEY_STORAGE)||''; }
