@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<!--
+  Outlandish Booth Inventory — production props & set-supplies tracker.
+  Single-file app: open in a browser, data lives in localStorage (booth_inventory_v1).
+  Optional: serve over HTTP next to a booth server exposing /api/inventory for group sync.
+  Colors follow the Outlandish Style Guide 2025 v1.2.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Outlandish Booth Inventory — Production Props & Set Supplies</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦆</text></svg>">
+<style>html{font-size:clamp(12px, 0.85vw + 5px, 32px)}
+  
+  /* Outlandish Style Guide 2025 v1.2 — official palette */
+  :root{
+    --bg:#2c1122; --panel:#3a1a3f; --panel2:#471f56; --line:#682f74;
+    --text:#ffffff; --muted:#b786bb; --accent:#f1991f; --accent2:#eeb31e;
+    --green:#34d399; --green-bg:#0e2f25; --red:#fb7185; --red-bg:#33161f;
+    --amber:#eeb31e; --chip:#471f56;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    background:var(--bg);color:var(--text);font-size:1.1875rem}
+  header{padding:1.125rem 1.5rem;border-bottom:1px solid var(--line);display:flex;
+    align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+    background:linear-gradient(180deg,#471f56,#2c1122)}
+  h1{font-size:1.875rem;margin:0;letter-spacing:.06em;text-transform:uppercase;
+    font-family:"Arial Narrow","Helvetica Neue Condensed",Roboto,sans-serif;font-weight:700}
+  h1 span{color:var(--muted);font-weight:400;font-size:1.125rem;margin-left:0.75rem;
+    text-transform:none;letter-spacing:normal;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{padding:1.75rem 2.5rem;max-width:none;width:100%;margin:0}
+
+  /* Stats */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.375rem,1fr));
+    gap:0.75rem;margin-bottom:1.25rem}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:0.75rem;padding:0.875rem 1rem}
+  .stat .n{font-size:2.375rem;font-weight:700}
+  .stat .l{color:var(--muted);font-size:0.9375rem;margin-top:0.25rem}
+  .stat.green .n{color:var(--green)} .stat.red .n{color:var(--red)}
+
+  /* Toolbar */
+  .toolbar{display:flex;gap:0.625rem;flex-wrap:wrap;align-items:center;margin-bottom:1rem}
+  input,select,textarea{background:var(--panel2);border:1px solid var(--line);color:var(--text);
+    border-radius:0.625rem;padding:0.75rem 0.9375rem;font-size:1.0625rem;outline:none;font-family:inherit}
+  input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+  .search{flex:1;min-width:12.5rem}
+  button{background:var(--accent2);color:#2c1122;border:none;border-radius:0.5625rem;padding:0.5625rem 0.9375rem;
+    font-size:1.0625rem;font-weight:600;cursor:pointer}
+  button:hover{background:var(--accent)}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--text);font-weight:500}
+  button.ghost:hover{border-color:var(--accent);background:var(--panel2)}
+  button.danger{background:transparent;border:1px solid var(--line);color:var(--red);font-weight:500}
+  button.danger:hover{background:var(--red-bg);border-color:var(--red)}
+
+  /* Table */
+  .tablewrap{background:var(--panel);border:1px solid var(--line);border-radius:0.75rem;overflow:hidden}
+  table{width:100%;border-collapse:collapse}
+  th{text-align:left;padding:0.875rem 1.125rem;font-size:0.8125rem;text-transform:uppercase;letter-spacing:.6px;
+    color:var(--muted);border-bottom:1px solid var(--line);cursor:pointer;white-space:nowrap;user-select:none}
+  th:hover{color:var(--text)}
+  td{padding:0.875rem 1.125rem;border-bottom:1px solid var(--line);vertical-align:middle;font-size:1.0625rem}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:var(--panel2)}
+  .name{font-weight:600}
+  .sub{color:var(--muted);font-size:0.875rem;margin-top:0.1875rem}
+  .swatch{display:inline-block;width:0.8125rem;height:0.8125rem;border-radius:0.1875rem;border:1px solid #0006;
+    margin-right:0.375rem;vertical-align:-1px}
+  .chip{display:inline-block;background:var(--chip);border:1px solid var(--line);border-radius:1.25rem;
+    padding:0.25rem 0.8125rem;font-size:0.875rem}
+  .badge{display:inline-block;border-radius:1.25rem;padding:0.3125rem 0.875rem;font-size:0.875rem;font-weight:600;white-space:nowrap}
+  .badge.avail{background:var(--green-bg);color:var(--green)}
+  .badge.taken{background:var(--red-bg);color:var(--red)}
+  .rowbtns{display:flex;gap:0.375rem;justify-content:flex-end}
+  .rowbtns button{padding:0.5625rem 0.875rem;font-size:0.875rem}
+  .empty{padding:3.125rem;text-align:center;color:var(--muted)}
+
+  /* Images */
+  .thumb{width:4rem;height:4rem;border-radius:0.5rem;object-fit:cover;border:1px solid var(--line);
+    background:var(--panel2);cursor:pointer;flex-shrink:0}
+  .thumb-ph{width:4rem;height:4rem;border-radius:0.5rem;border:1px solid var(--line);background:var(--panel2);
+    display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:1.125rem;flex-shrink:0}
+  .itemcell{display:flex;align-items:center;gap:0.6875rem}
+  .uploadrow{display:flex;align-items:center;gap:0.75rem}
+  .preview{width:4rem;height:4rem;border-radius:0.625rem;object-fit:cover;border:1px solid var(--line);
+    background:var(--panel2)}
+  .preview-ph{width:4rem;height:4rem;border-radius:0.625rem;border:1px dashed var(--line);background:var(--panel2);
+    display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:1.375rem}
+  .lightbox{position:fixed;inset:0;background:#000d;display:none;align-items:center;justify-content:center;
+    z-index:60;padding:1.875rem;cursor:zoom-out}
+  .lightbox.open{display:flex}
+  .lightbox img{max-width:90vw;max-height:90vh;border-radius:0.75rem;border:1px solid var(--line)}
+
+  /* Modal */
+  .overlay{position:fixed;inset:0;background:#000a;display:none;align-items:flex-start;
+    justify-content:center;padding:2.5rem 1rem;overflow:auto;z-index:50}
+  .overlay.open{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:1rem;width:100%;
+    max-width:35rem;padding:1.5rem}
+  .modal h2{margin:0 0 1.125rem;font-size:1.125rem}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0.75rem}
+  .field{margin-bottom:0.75rem;display:flex;flex-direction:column;gap:0.3125rem}
+  .field label{font-size:0.75rem;color:var(--muted);font-weight:600}
+  .field input,.field select,.field textarea{width:100%}
+  .modal-actions{display:flex;justify-content:space-between;gap:0.625rem;margin-top:1.125rem}
+  .hint{font-size:0.75rem;color:var(--muted);margin-top:-0.375rem}
+  @media(max-width:40rem){.grid2{grid-template-columns:1fr}
+    th.hide,td.hide{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>🦆 Booth Inventory <span>Outlandish production · props · set supplies</span></h1>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="ghost" onclick="exportJSON()">Backup</button>
+    <button class="ghost" onclick="document.getElementById('importFile').click()">Restore</button>
+    <button class="ghost" onclick="exportCSV()">Export CSV</button>
+    <button class="ghost" onclick="openBrief()">🎯 Match a brief</button>
+    <button class="ghost" onclick="openPhotoBrief()">📸 Match a photo</button>
+    <button class="ghost" onclick="autoTagAll()">🏷️ Auto-tag photos</button>
+    <button class="ghost" onclick="openBrand()">✨ Booth ideas</button>
+    <span id="syncDot" style="align-self:center;color:var(--muted);font-size:0.85em;white-space:nowrap">● local</span>
+    <button class="ghost" onclick="setApiKey()">🔑 API key</button>
+    <button onclick="openForm()">+ Add item</button>
+    <input type="file" id="importFile" accept=".json" style="display:none" onchange="importJSON(event)">
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="stats" id="stats"></div>
+
+  <div class="toolbar">
+    <input class="search" id="search" placeholder="Search name, location, notes…" oninput="render()">
+    <select id="fType" onchange="render()"><option value="">All types</option></select>
+    <select id="fStatus" onchange="render()">
+      <option value="">All statuses</option>
+      <option value="available">Available only</option>
+      <option value="taken">Taken only</option>
+    </select>
+    <select id="fBooth" onchange="render()"><option value="">All booths</option></select>
+  </div>
+
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr>
+          <th onclick="sortBy('name')">Item</th>
+          <th onclick="sortBy('type')">Type</th>
+          <th class="hide" onclick="sortBy('color')">Color</th>
+          <th class="hide" onclick="sortBy('height')">Dimensions</th>
+          <th onclick="sortBy('qty')">Qty</th>
+          <th class="hide" onclick="sortBy('location')">Location</th>
+          <th onclick="sortBy('status')">Status</th>
+          <th style="text-align:right">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty" style="display:none">No items yet. Click <b>+ Add item</b> to start your inventory.</div>
+  </div>
+</div>
+
+<!-- Item modal -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h2 id="modalTitle">Add item</h2>
+    <input type="hidden" id="f_id">
+    <div class="field">
+      <label>Item name *</label>
+      <input id="f_name" placeholder="e.g. Tall potted fern">
+    </div>
+    <div class="field">
+      <label>Photo</label>
+      <div class="uploadrow">
+        <img id="f_preview" class="preview" style="display:none" onclick="viewImage(f_image.value)">
+        <div id="f_preview_ph" class="preview-ph">📷</div>
+        <input type="hidden" id="f_image">
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <button type="button" class="ghost" onclick="document.getElementById('imgInput').click()">Choose / take photo</button>
+          <button type="button" class="ghost" id="rmImgBtn" onclick="clearImage()" style="display:none;color:var(--red)">Remove photo</button>
+        </div>
+        <input type="file" id="imgInput" accept="image/*" capture="environment" style="display:none" onchange="handleImage(event)">
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="field">
+        <label>Type / category</label>
+        <input id="f_type" list="typeList" placeholder="Prop, Set piece, Art supply…">
+        <datalist id="typeList"></datalist>
+      </div>
+      <div class="field">
+        <label>Quantity</label>
+        <input id="f_qty" type="number" min="0" step="1" value="1">
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="field">
+        <label>Color</label>
+        <input id="f_color" list="colorList" placeholder="e.g. Sage green">
+        <datalist id="colorList">
+          <option>Black</option><option>White</option><option>Red</option><option>Blue</option>
+          <option>Green</option><option>Yellow</option><option>Pink</option><option>Purple</option>
+          <option>Orange</option><option>Brown</option><option>Gray</option><option>Gold</option>
+          <option>Silver</option><option>Beige</option><option>Multicolor</option><option>Clear</option>
+        </datalist>
+      </div>
+      <div class="field">
+        <label>Dimensions (H × W × D)</label>
+        <input id="f_height" placeholder='e.g. 6 ft  or  24×12×12 in'>
+      </div>
+    </div>
+    <div class="field">
+      <label>Where to find it</label>
+      <input id="f_location" placeholder="e.g. Storage closet B, shelf 3 / Warehouse bin 14">
+    </div>
+    <div class="field">
+      <label>Notes</label>
+      <textarea id="f_notes" rows="2" placeholder="Condition, set, fragile, needs batteries…"></textarea>
+    </div>
+
+    <div class="field">
+      <label>Search keywords</label>
+      <input id="f_keywords" placeholder="cup, mug, drinkware — helps search find this item">
+      <div class="hint">Comma-separated. The 🏷️ Auto-tag button fills these with AI.</div>
+    </div>
+
+    <hr style="border:none;border-top:1px solid var(--line);margin:16px 0">
+
+    <div class="field">
+      <label>Status</label>
+      <select id="f_status" onchange="toggleBooth()">
+        <option value="available">Available</option>
+        <option value="taken">Taken — in use at a booth</option>
+      </select>
+    </div>
+    <div class="field" id="boothField" style="display:none">
+      <label>Which brand's booth?</label>
+      <input id="f_booth" list="boothList" placeholder="e.g. Nike, Glossier…">
+      <datalist id="boothList"></datalist>
+      <div class="hint">Shown as “Taken — at [brand]” so everyone knows where it went.</div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="danger" id="delBtn" onclick="deleteItem()" style="display:none">Delete</button>
+      <div style="display:flex;gap:10px;margin-left:auto">
+        <button class="ghost" onclick="closeForm()">Cancel</button>
+        <button onclick="saveItem()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Brief matcher modal -->
+<div class="overlay" id="briefOverlay">
+  <div class="modal" style="max-width:640px">
+    <h2>Match a brief to inventory</h2>
+    <div class="field">
+      <label>Paste the brand brief / deal description</label>
+      <textarea id="briefText" rows="5" placeholder="e.g. Need a boho-glam set: pink neon sign, potted palms, velvet cushions, gold accents, a small round table…"></textarea>
+    </div>
+    <div class="modal-actions" style="margin-top:0">
+      <button class="ghost" onclick="closeBrief()">Close</button>
+      <div style="margin-left:auto"><button onclick="matchBrief()">Find matches</button></div>
+    </div>
+    <div id="briefResults" style="margin-top:18px"></div>
+  </div>
+</div>
+
+<!-- Photo matcher modal -->
+<div class="overlay" id="photoOverlay">
+  <div class="modal" style="max-width:640px">
+    <h2>Match a concept photo</h2>
+    <div class="field">
+      <label>Upload a booth concept photo (for your own reference)</label>
+      <div class="uploadrow">
+        <img id="photo_preview" class="preview" style="display:none" onclick="viewImage(photoBase64Url)">
+        <div id="photo_preview_ph" class="preview-ph">📷</div>
+        <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="handlePhotoUpload(event)">
+        <button type="button" class="ghost" onclick="document.getElementById('photoInput').click()">Choose photo</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Describe what's in the photo</label>
+      <textarea id="photoDescText" rows="4" placeholder="e.g. gold round table, potted ferns, pink neon sign, velvet couch, rainbow arch backdrop"></textarea>
+      <div class="hint">Type the props, furniture, colors, and materials you see — as many or as few words as you like.</div>
+    </div>
+    <div class="modal-actions" style="margin-top:0">
+      <button class="ghost" onclick="closePhotoBrief()">Close</button>
+      <div style="display:flex;gap:10px;margin-left:auto">
+        <button class="ghost" id="analyzePhotoBtn" onclick="analyzePhoto()" disabled title="Optional: auto-fill the description using your Claude API key">🤖 Auto-describe</button>
+        <button onclick="findPhotoMatches()">Find matches</button>
+      </div>
+    </div>
+    <div id="photoResults" style="margin-top:18px"></div>
+  </div>
+</div>
+
+<!-- Brand booth ideas modal -->
+<div class="overlay" id="brandOverlay">
+  <div class="modal" style="max-width:42em">
+    <h2>✨ Booth ideas for a brand</h2>
+    <div class="field">
+      <label>Brand</label>
+      <input id="brandName" placeholder="e.g. Glossier, Martie, Nike…">
+    </div>
+    <div class="field">
+      <label>Anything else? (optional)</label>
+      <textarea id="brandNotes" rows="2" placeholder="vibe, colors, product type, event details…"></textarea>
+    </div>
+    <div class="modal-actions" style="margin-top:0">
+      <button class="ghost" onclick="closeBrand()">Close</button>
+      <div style="margin-left:auto"><button onclick="runBrand()">Recommend items</button></div>
+    </div>
+    <div id="brandResults" style="margin-top:18px;max-height:60vh;overflow:auto"></div>
+  </div>
+</div>
+
+<!-- Auto-tag progress toast -->
+<div id="tagProgress" style="display:none;position:fixed;bottom:1.5em;right:1.5em;z-index:70;background:var(--panel);border:1px solid var(--accent);border-radius:12px;padding:0.9em 1.1em;gap:0.9em;align-items:center;box-shadow:0 4px 24px #0008">
+  <span class="sub" style="font-size:0.95em">Tagging…</span>
+  <button class="ghost" onclick="stopTagging()" style="padding:0.35em 0.9em">Stop</button>
+</div>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox" onclick="this.classList.remove('open')">
+  <img id="lightboxImg" alt="">
+</div>
+
+<script>
+const KEY='booth_inventory_v1';
+let items=[];
+let sort={col:'name',dir:1};
+
+function load(){ try{items=JSON.parse(localStorage.getItem(KEY))||[]}catch(e){items=[]} }
+function save(){
+  try{ localStorage.setItem(KEY,JSON.stringify(items)); }
+  catch(e){ alert("Storage is full — likely too many photos. Try removing a photo or using smaller ones. Use Backup to save your data safely."); }
+}
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7) }
+
+// color swatch mapping for common color words
+function colorHex(c){
+  if(!c) return null;
+  const m={black:'#222',white:'#f5f5f5',red:'#e23',blue:'#37e',green:'#3a6',yellow:'#fc3',
+    pink:'#f7a',purple:'#94e',orange:'#f83',brown:'#964',gray:'#888',grey:'#888',
+    gold:'#d4af37',silver:'#bcc',beige:'#e8dcc0',clear:'#cfe8f0',sage:'#9caf88',navy:'#234'};
+  const key=Object.keys(m).find(k=>c.toLowerCase().includes(k));
+  return key?m[key]:null;
+}
+
+function render(){
+  const q=document.getElementById('search').value.toLowerCase();
+  const ft=document.getElementById('fType').value;
+  const fs=document.getElementById('fStatus').value;
+  const fb=document.getElementById('fBooth').value;
+
+  let list=items.filter(it=>{
+    if(it.deleted) return false; const hay=(it.name+' '+it.location+' '+it.notes+' '+it.color+' '+it.type+' '+(it.booth||'')+' '+((it.keywords||[]).join(' '))).toLowerCase();
+    if(q && !hay.includes(q)) return false;
+    if(ft && it.type!==ft) return false;
+    if(fs && it.status!==fs) return false;
+    if(fb && it.booth!==fb) return false;
+    return true;
+  });
+
+  list.sort((a,b)=>{
+    let x=a[sort.col]??'', y=b[sort.col]??'';
+    if(sort.col==='qty'){x=+x||0;y=+y||0}
+    else {x=(''+x).toLowerCase();y=(''+y).toLowerCase()}
+    return x<y?-sort.dir:x>y?sort.dir:0;
+  });
+
+  const rows=document.getElementById('rows');
+  document.getElementById('empty').style.display=list.length?'none':'block';
+  rows.innerHTML=list.map(it=>{
+    const hex=colorHex(it.color);
+    const sw=hex?`<span class="swatch" style="background:${hex}"></span>`:'';
+    const status=it.status==='taken'
+      ? `<span class="badge taken">Taken — ${esc(it.booth||'?')}</span>`
+      : `<span class="badge avail">Available</span>`;
+    const thumb=it.image
+      ? `<img class="thumb" src="${it.image}" onclick="viewImage('${it.id}',event)" alt="">`
+      : `<span class="thumb-ph">📦</span>`;
+    return `<tr>
+      <td><div class="itemcell">${thumb}<div><div class="name">${esc(it.name)}</div>${it.notes?`<div class="sub">${esc(it.notes)}</div>`:''}</div></div></td>
+      <td>${it.type?`<span class="chip">${esc(it.type)}</span>`:'<span class="sub">—</span>'}</td>
+      <td class="hide">${it.color?sw+esc(it.color):'<span class="sub">—</span>'}</td>
+      <td class="hide">${it.height?esc(it.height):'<span class="sub">—</span>'}</td>
+      <td>${it.qty??1}</td>
+      <td class="hide">${it.location?esc(it.location):'<span class="sub">—</span>'}</td>
+      <td>${status}</td>
+      <td><div class="rowbtns">
+        <button class="ghost" onclick="quickToggle('${it.id}')">${it.status==='taken'?'Return':'Check out'}</button>
+        <button class="ghost" onclick="openForm('${it.id}')">Edit</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+
+  renderStats();
+  refreshFilters();
+}
+
+function renderStats(){
+  const live=items.filter(it=>!it.deleted); const total=live.reduce((s,it)=>s+(+it.qty||0),0);
+  const taken=live.filter(it=>it.status==='taken').length;
+  const avail=live.filter(it=>it.status!=='taken').length;
+  const booths=new Set(live.filter(it=>it.status==='taken'&&it.booth).map(it=>it.booth)).size;
+  document.getElementById('stats').innerHTML=`
+    <div class="stat"><div class="n">${live.length}</div><div class="l">Distinct items</div></div>
+    <div class="stat"><div class="n">${total}</div><div class="l">Total units</div></div>
+    <div class="stat green"><div class="n">${avail}</div><div class="l">Available</div></div>
+    <div class="stat red"><div class="n">${taken}</div><div class="l">Taken / in use</div></div>
+    <div class="stat"><div class="n">${booths}</div><div class="l">Active booths</div></div>`;
+}
+
+function refreshFilters(){
+  const types=[...new Set(items.filter(it=>!it.deleted).map(it=>it.type).filter(Boolean))].sort();
+  const booths=[...new Set(items.filter(it=>!it.deleted).map(it=>it.booth).filter(Boolean))].sort();
+  fillSelect('fType',types,'All types');
+  fillSelect('fBooth',booths,'All booths');
+  document.getElementById('typeList').innerHTML=types.map(t=>`<option>${esc(t)}</option>`).join('');
+  document.getElementById('boothList').innerHTML=booths.map(b=>`<option>${esc(b)}</option>`).join('');
+}
+function fillSelect(id,opts,allLabel){
+  const el=document.getElementById(id), cur=el.value;
+  el.innerHTML=`<option value="">${allLabel}</option>`+opts.map(o=>`<option>${esc(o)}</option>`).join('');
+  if(opts.includes(cur)) el.value=cur;
+}
+
+function sortBy(col){ sort.dir=(sort.col===col)?-sort.dir:1; sort.col=col; render() }
+
+// ---- form ----
+function openForm(id){
+  const it=items.find(x=>x.id===id);
+  document.getElementById('modalTitle').textContent=it?'Edit item':'Add item';
+  document.getElementById('f_id').value=it?it.id:'';
+  document.getElementById('f_name').value=it?it.name:'';
+  document.getElementById('f_type').value=it?it.type:'';
+  document.getElementById('f_qty').value=it?(it.qty??1):1;
+  document.getElementById('f_color').value=it?it.color:'';
+  document.getElementById('f_height').value=it?it.height:'';
+  document.getElementById('f_location').value=it?it.location:'';
+  document.getElementById('f_notes').value=it?it.notes:''; document.getElementById('f_keywords').value=(it&&it.keywords)?it.keywords.join(', '):'';
+  document.getElementById('f_status').value=it?it.status:'available';
+  document.getElementById('f_booth').value=it?(it.booth||''):'';
+  setImage(it?(it.image||''):'');
+  document.getElementById('delBtn').style.display=it?'block':'none';
+  toggleBooth();
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('f_name').focus();
+}
+function closeForm(){ document.getElementById('overlay').classList.remove('open') }
+function toggleBooth(){
+  document.getElementById('boothField').style.display=
+    document.getElementById('f_status').value==='taken'?'flex':'none';
+}
+function saveItem(){
+  const name=document.getElementById('f_name').value.trim();
+  if(!name){ document.getElementById('f_name').focus(); return }
+  const id=document.getElementById('f_id').value;
+  const status=document.getElementById('f_status').value;
+  const data={
+    id:id||uid(),
+    name,
+    type:document.getElementById('f_type').value.trim(),
+    qty:+document.getElementById('f_qty').value||1,
+    color:document.getElementById('f_color').value.trim(),
+    height:document.getElementById('f_height').value.trim(),
+    location:document.getElementById('f_location').value.trim(),
+    notes:document.getElementById('f_notes').value.trim(), keywords:document.getElementById('f_keywords').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean), updatedAt:Date.now(),
+    image:document.getElementById('f_image').value,
+    status,
+    booth:status==='taken'?document.getElementById('f_booth').value.trim():''
+  };
+  if(id){ items=items.map(x=>x.id===id?data:x) } else { items.push(data) }
+  save(); closeForm(); render();
+}
+function deleteItem(){
+  const id=document.getElementById('f_id').value;
+  if(id && confirm('Delete this item from the inventory?')){
+    const dit=items.find(x=>x.id===id); if(dit){dit.deleted=true; dit.updatedAt=Date.now();} save(); closeForm(); render();
+  }
+}
+function quickToggle(id){
+  const it=items.find(x=>x.id===id); if(!it) return;
+  if(it.status==='taken'){ it.status='available'; it.booth=''; it.updatedAt=Date.now(); }
+  else{
+    const b=prompt('Checking out "'+it.name+'". Which brand\'s booth is it going to?');
+    if(b===null) return;
+    it.status='taken'; it.booth=b.trim(); it.updatedAt=Date.now();
+  }
+  save(); render();
+}
+
+// ---- images ----
+function handleImage(e){
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    const img=new Image();
+    img.onload=()=>{
+      const max=800;
+      let{width:w,height:h}=img;
+      if(w>max||h>max){ const s=max/Math.max(w,h); w=Math.round(w*s); h=Math.round(h*s); }
+      const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+      cv.getContext('2d').drawImage(img,0,0,w,h);
+      setImage(cv.toDataURL('image/jpeg',0.78));
+    };
+    img.src=r.result;
+  };
+  r.readAsDataURL(f); e.target.value='';
+}
+function setImage(dataUrl){
+  document.getElementById('f_image').value=dataUrl||'';
+  const pv=document.getElementById('f_preview'), ph=document.getElementById('f_preview_ph'),
+        rm=document.getElementById('rmImgBtn');
+  if(dataUrl){ pv.src=dataUrl; pv.style.display='block'; ph.style.display='none'; rm.style.display='block'; }
+  else{ pv.style.display='none'; ph.style.display='flex'; rm.style.display='none'; }
+}
+function clearImage(){ setImage('') }
+function viewImage(idOrUrl,e){
+  if(e) e.stopPropagation();
+  let src=idOrUrl;
+  if(idOrUrl && !idOrUrl.startsWith('data:')){ const it=items.find(x=>x.id===idOrUrl); src=it&&it.image; }
+  if(!src) return;
+  document.getElementById('lightboxImg').src=src;
+  document.getElementById('lightbox').classList.add('open');
+}
+
+// ---- import / export ----
+function exportJSON(){
+  download('booth-inventory-backup.json',JSON.stringify(items,null,2));
+}
+function importJSON(e){
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{ try{
+    const data=JSON.parse(r.result);
+    if(!Array.isArray(data)) throw 0;
+    if(confirm('Replace current inventory with '+data.length+' items from this backup?')){
+      items=data.map(x=>({id:x.id||uid(),...x})); save(); render();
+    }
+  }catch(err){ alert('That file is not a valid backup.') } };
+  r.readAsText(f); e.target.value='';
+}
+function exportCSV(){
+  const cols=['name','type','qty','color','height','location','status','booth','notes','image'];
+  const head=cols.join(',');
+  const body=items.map(it=>cols.map(c=>{
+    const v=c==='image'?(it.image?'yes':''):(it[c]??'');
+    return `"${(''+v).replace(/"/g,'""')}"`;
+  }).join(',')).join('\n');
+  download('booth-inventory.csv',head+'\n'+body);
+}
+function download(name,text){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([text],{type:'text/plain'}));
+  a.download=name; a.click();
+}
+
+function esc(s){ return (''+(s??'')).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])) }
+
+// ---- brief matcher ----
+const STOPWORDS=new Set(['the','a','an','and','or','for','to','with','of','in','on','at','is','are','be','we',
+  'need','needed','needs','want','wants','wanting','looking','set','dressing','brand','deal','deals','contract',
+  'contracts','description','please','some','any','our','their','this','that','these','those','it','as','by',
+  'from','into','will','shall','should','would','can','could','have','has','had','also','more','less','very',
+  'style','styled','styling','shoot','shot','video','livestream','booth','vibe','vibes','aesthetic','theme',
+  'themed','overall','item','items','piece','pieces','small','large','few','couple','around','about','one','two',
+  'three','per','ideally','maybe','probably','something','things','thing',
+  "we'll","we're","don't","doesn't","didn't","isn't","aren't","couldn't","wouldn't","shouldn't","it's","that's",
+  "there's","i'll","you'll","they'll","build","builds",
+  'cozy','cheerful','nostalgic','excited','welcoming','curated','feel','feels','felt','favorite','memory',
+  'memories','friend','friends','showing','trigger','triggers','warm','childhood','adult','adults','collector',
+  'collectors','abundance','spark','sparks','selling','familiar','safe','comfort','hug','hugs','baseline',
+  'emotion','emotions','viewer','viewers','make','made','want','wanted','live','great','how']);
+
+const BUY_GUIDE=[
+  {key:'plant',words:['plant','plants','fern','ferns','greenery','foliage','palm','palms','succulent','succulents','floral','florals','flower','flowers','botanical'],label:'Faux plants / greenery',price:'$15–40 ea',tip:'Check Facebook Marketplace or HomeGoods clearance before buying new.'},
+  {key:'seating',words:['couch','sofa','loveseat','armchair','chair','chairs','seating','stool','stools','ottoman'],label:'Thrifted seating (couch / chair / stool)',price:'$40–150',tip:'Facebook Marketplace or thrift stores usually beat retail here.'},
+  {key:'neon',words:['neon','signage','sign','signs','marquee'],label:'LED neon-style sign',price:'$25–60',tip:'Budget LED neon signs on Amazon read well on camera.'},
+  {key:'lighting',words:['lamp','lamps','lighting','light','lights','uplighting','sconce','sconces'],label:'Floor / table lamp',price:'$20–50'},
+  {key:'mirror',words:['mirror','mirrors'],label:'Standing or wall mirror',price:'$25–70'},
+  {key:'disco',words:['disco','discoball','sparkle','glitterball'],label:'Mirror disco ball + motor',price:'$20–45'},
+  {key:'drape',words:['drape','drapes','drapery','curtain','curtains','backdrop','backdrops'],label:'Fabric backdrop / drape',price:'$20–50'},
+  {key:'rug',words:['rug','rugs','carpet'],label:'Area rug',price:'$30–80'},
+  {key:'pedestal',words:['pedestal','pedestals','plinth','plinths','riser','risers','stand','stands','display','base','bases'],label:'Display pedestal / riser',price:'$20–40'},
+  {key:'arch',words:['arch','arches','archway','archways'],label:'Photo-op arch backdrop frame',price:'$40–90',tip:'Balloon-arch frame kits or a painted plywood arch both work well.'},
+  {key:'displaywall',words:['pegboard','gridwall','grid'],label:'Pegboard / grid wall for character display',price:'$30–80',tip:'Pegboard sheets + hooks, or a slatwall/grid panel from a display supplier.'},
+  {key:'colorpalette',words:['pastel','pastels','rainbow','rainbows','colorful','bright','brights','highkey'],label:'Colorful / pastel seamless backdrop paper',price:'$15–40',tip:'Seamless paper rolls in pastel or rainbow tones (B&H, Amazon) make an easy high-key backdrop.'},
+  {key:'crate',words:['crate','crates','box','boxes'],label:'Wooden crates',price:'$10–25'},
+  {key:'gold',words:['gold','metallic','brass'],label:'Gold spray paint + accent decor',price:'$10–20'},
+  {key:'velvet',words:['velvet'],label:'Velvet throw / pillow covers',price:'$15–35'},
+  {key:'balloon',words:['balloon','balloons','garland','garlands'],label:'Balloon garland kit',price:'$15–30'},
+  {key:'table',words:['table','tables','tabletop'],label:'Folding or accent table',price:'$25–60'},
+  {key:'pillow',words:['pillow','pillows','cushion','cushions','throw','throws'],label:'Throw pillows / cushions',price:'$10–20 ea'},
+  {key:'shelf',words:['shelf','shelves','shelving'],label:'Shelving unit / floating shelves',price:'$25–70',tip:'IKEA or Target have cheap floating shelves that photograph well.'},
+  {key:'decor',words:['decor','decoration','decorations','accent','accents','accessory','accessories','trinket','trinkets','knickknack','knickknacks'],label:'Small decor accents (vases, trays, candles, books)',price:'$10–30 ea',tip:'HomeGoods / TJ Maxx / thrift stores for cheap variety.'},
+  {key:'tablecloth',words:['tablecloth','tablecloths','linen','linens'],label:'Table linens / tablecloth',price:'$10–25'},
+  {key:'walldecor',words:['walldecor','wallart','wallhanging','wallhangings'],label:'Wall art / wall hanging accent',price:'$15–40'},
+  {key:'paint',words:['paintcolor','paintcolors','paint'],label:'Paint (accent wall / set pieces)',price:'$25–45 per gallon (sample sizes ~$10)',tip:'Sherwin-Williams or Behr sample-size cans are cheaper for small builds.'},
+  {key:'wood',words:['wood','plywood','lumber','woodgrain'],label:'Plywood / lumber for builds',price:'$20–60 per sheet/board',tip:'Home Depot / Lowe\'s scrap-wood bin is often free or cheap for small pieces.'},
+];
+
+function normalizePhrases(text){
+  return text
+    .replace(/table\s*cloths?/gi,'tablecloth')
+    .replace(/paint\s*colou?rs?/gi,'paintcolor')
+    .replace(/wall\s*(decor|decoration|decorations|detail|details|art|hanging|hangings|accent|accents)/gi,'walldecor')
+    .replace(/floating\s*shel(f|ves)/gi,'shelf')
+    .replace(/high[-\s]?key/gi,'highkey');
+}
+function tokenize(text){
+  const norm=normalizePhrases(text);
+  return [...new Set((norm.toLowerCase().match(/[a-z']+/g)||[])
+    .filter(w=>w.length>2 && !STOPWORDS.has(w)))];
+}
+function itemHay(it){
+  return (it.name+' '+it.type+' '+it.color+' '+it.notes+' '+it.location+' '+((it.keywords||[]).join(' '))).toLowerCase();
+}
+function findBuyGuide(token){
+  const singular=token.endsWith('s')?token.slice(0,-1):token;
+  return BUY_GUIDE.find(g=>g.words.includes(token)||g.words.includes(singular));
+}
+function briefItemRow(s){
+  const it=s.it;
+  return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)">
+    <div><div class="name">${esc(it.name)}</div>
+    <div class="sub">${s.hits.length?('matched: '+s.hits.map(esc).join(', ')):''}${it.location?' · '+esc(it.location):''}${it.status==='taken'?' · taken — '+esc(it.booth||'?'):''}</div></div>
+    <button class="ghost" onclick="closeBrief();openForm('${it.id}')">View</button>
+  </div>`;
+}
+function buildMatchHtml(text){
+  const tokens=tokenize(text);
+  if(!tokens.length) return '<div class="sub">Couldn\'t pull any keywords from that — try adding more descriptive words (colors, materials, item types).</div>';
+
+  const matchedTokens=new Set();
+  const scored=items.filter(it=>!it.deleted).map(it=>{
+    const hay=itemHay(it);
+    const hits=tokens.filter(t=>{
+      const singular=t.endsWith('s')?t.slice(0,-1):t;
+      const plural=t.endsWith('s')?t:t+'s';
+      return hay.includes(t)||hay.includes(singular)||hay.includes(plural);
+    });
+    hits.forEach(h=>matchedTokens.add(h));
+    return {it,score:hits.length,hits};
+  }).filter(s=>s.score>0).sort((a,b)=>b.score-a.score);
+
+  const avail=scored.filter(s=>s.it.status!=='taken');
+  const taken=scored.filter(s=>s.it.status==='taken');
+  const gaps=tokens.filter(t=>!matchedTokens.has(t));
+
+  const guideSeen=new Set(); const guideCards=[]; const looseGaps=[];
+  gaps.forEach(g=>{
+    const guide=findBuyGuide(g);
+    if(guide){ if(!guideSeen.has(guide.key)){ guideSeen.add(guide.key); guideCards.push(guide); } }
+    else looseGaps.push(g);
+  });
+
+  let html='';
+  html+=`<h3 style="margin:0 0 8px;font-size:14px">✅ From your inventory (${avail.length})</h3>`;
+  html+= avail.length? avail.map(briefItemRow).join('') : '<div class="sub" style="padding-bottom:10px">No available items matched — see buy suggestions below.</div>';
+
+  if(taken.length){
+    html+=`<h3 style="margin:16px 0 8px;font-size:14px">📦 Matched but currently taken (${taken.length})</h3>`;
+    html+=taken.map(briefItemRow).join('');
+  }
+
+  html+=`<h3 style="margin:16px 0 8px;font-size:14px">🛒 Consider buying</h3>`;
+  if(guideCards.length||looseGaps.length){
+    html+=guideCards.map(g=>`<div style="padding:9px 0;border-bottom:1px solid var(--line)">
+        <div class="name">${esc(g.label)}</div>
+        <div class="sub">${esc(g.price)}${g.tip?' · '+esc(g.tip):''}</div>
+      </div>`).join('');
+    if(looseGaps.length){
+      const shown=looseGaps.slice(0,12), extra=looseGaps.length-shown.length;
+      html+=`<div class="sub" style="padding-top:8px">Other words mentioned, no obvious item match: ${shown.map(esc).join(', ')}${extra>0?` (+${extra} more)`:''}</div>`;
+    }
+  } else {
+    html+='<div class="sub">Everything in the brief is covered by your current inventory.</div>';
+  }
+  return html;
+}
+function matchBrief(){
+  const text=document.getElementById('briefText').value.trim();
+  const out=document.getElementById('briefResults');
+  if(!text){ out.innerHTML='<div class="sub">Paste a brief above first.</div>'; return; }
+  out.innerHTML=buildMatchHtml(text);
+}
+function openBrief(){
+  document.getElementById('briefOverlay').classList.add('open');
+  document.getElementById('briefResults').innerHTML='';
+  document.getElementById('briefText').focus();
+}
+function closeBrief(){ document.getElementById('briefOverlay').classList.remove('open') }
+
+// ---- photo matcher (Claude vision) ----
+const API_KEY_STORAGE='claude_api_key_v1';
+function getApiKey(){ return localStorage.getItem(API_KEY_STORAGE)||''; }
+function setApiKey(){
+  const key=prompt('Enter your Anthropic API key (starts with sk-ant-...). It is stored only in this browser\'s local storage and sent directly to Anthropic\'s API — never to any other server.', getApiKey());
+  if(key===null) return;
+  if(key.trim()) localStorage.setItem(API_KEY_STORAGE, key.trim());
+  else localStorage.removeItem(API_KEY_STORAGE);
+}
+
+let photoBase64=null, photoMediaType=null, photoBase64Url=null;
+function openPhotoBrief(){
+  document.getElementById('photoOverlay').classList.add('open');
+}
+function closePhotoBrief(){ document.getElementById('photoOverlay').classList.remove('open') }
+
+function handlePhotoUpload(e){
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    const img=new Image();
+    img.onload=()=>{
+      const max=1024;
+      let{width:w,height:h}=img;
+      if(w>max||h>max){ const s=max/Math.max(w,h); w=Math.round(w*s); h=Math.round(h*s); }
+      const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+      cv.getContext('2d').drawImage(img,0,0,w,h);
+      const dataUrl=cv.toDataURL('image/jpeg',0.85);
+      photoBase64=dataUrl.split(',')[1];
+      photoMediaType='image/jpeg';
+      photoBase64Url=dataUrl;
+      const pv=document.getElementById('photo_preview'), ph=document.getElementById('photo_preview_ph');
+      pv.src=dataUrl; pv.style.display='block'; ph.style.display='none';
+      document.getElementById('analyzePhotoBtn').disabled=false;
+    };
+    img.src=r.result;
+  };
+  r.readAsDataURL(f); e.target.value='';
+}
+
+function findPhotoMatches(){
+  const text=document.getElementById('photoDescText').value.trim();
+  const out=document.getElementById('photoResults');
+  if(!text){ out.innerHTML='<div class="sub">Describe what\'s in the photo above first.</div>'; return; }
+  out.innerHTML=buildMatchHtml(text);
+}
+
+async function analyzePhoto(){
+  if(!photoBase64){ alert('Choose a photo first.'); return; }
+  let key=getApiKey();
+  if(!key){
+    if(!confirm('No Anthropic API key saved yet. Add one now? (Not required — you can also just type the description yourself.)')) return;
+    setApiKey();
+    key=getApiKey();
+    if(!key) return;
+  }
+  const btn=document.getElementById('analyzePhotoBtn');
+  const textEl=document.getElementById('photoDescText');
+  btn.disabled=true;
+  const prevText=textEl.value;
+  textEl.value='Analyzing photo…';
+  try{
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{
+        'content-type':'application/json',
+        'x-api-key':key,
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true'
+      },
+      body:JSON.stringify({
+        model:'claude-opus-4-8',
+        max_tokens:1024,
+        messages:[{
+          role:'user',
+          content:[
+            {type:'image',source:{type:'base64',media_type:photoMediaType,data:photoBase64}},
+            {type:'text',text:'This is a concept photo for an event booth / set-dressing display. List every distinct physical prop, furniture piece, decor item, backdrop element, material, and color visible — one short item per line, plain language, no numbering, no extra commentary. Focus only on things a set dresser would need to source or pull from inventory.'}
+          ]
+        }]
+      })
+    });
+    const data=await resp.json();
+    if(!resp.ok){
+      textEl.value=prevText;
+      alert('API error: '+((data.error&&data.error.message)||resp.statusText));
+      return;
+    }
+    if(data.stop_reason==='refusal'){
+      textEl.value=prevText;
+      alert('Claude declined to analyze this image.');
+      return;
+    }
+    const textBlock=(data.content||[]).find(b=>b.type==='text');
+    const description=textBlock?textBlock.text:'';
+    textEl.value=description.trim()||prevText;
+  }catch(err){
+    textEl.value=prevText;
+    alert('Request failed: '+err.message);
+  }finally{
+    btn.disabled=false;
+  }
+}
+
+document.getElementById('overlay').addEventListener('click',e=>{ if(e.target.id==='overlay') closeForm() });
+document.getElementById('briefOverlay').addEventListener('click',e=>{ if(e.target.id==='briefOverlay') closeBrief() });
+document.getElementById('photoOverlay').addEventListener('click',e=>{ if(e.target.id==='photoOverlay') closePhotoBrief() });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'){ closeForm(); closeBrief(); closePhotoBrief(); } });
+
+load(); render();
+</script>
+<script>
+/* ===== v2 features: AI keyword tagging, group sync, brand booth ideas ===== */
+
+// ---- shared Claude API helper (uses the key saved via the API key button) ----
+async function claudeCall(model, content, maxTokens){
+  const key=getApiKey();
+  if(!key) throw new Error('No API key saved — click the 🔑 API key button first.');
+  const resp=await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'content-type':'application/json','x-api-key':key,
+      'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:model,max_tokens:maxTokens||1024,messages:[{role:'user',content:content}]})
+  });
+  const data=await resp.json();
+  if(!resp.ok) throw new Error((data.error&&data.error.message)||resp.statusText);
+  const block=(data.content||[]).find(b=>b.type==='text');
+  return block?block.text:'';
+}
+
+// ---- 1) AI auto-tagging: Claude views each photo and attaches search keywords ----
+let tagAbort=false;
+async function autoTagAll(skipConfirm){
+  const todo=items.filter(it=>!it.deleted && it.image && (!it.keywords||!it.keywords.length));
+  if(!todo.length){ alert('All items with photos already have keywords.'); return; }
+  if(!getApiKey()){ setApiKey(); if(!getApiKey()) return; }
+  if(!skipConfirm && !confirm('Auto-tag '+todo.length+' items with AI keywords? Uses your Anthropic API key (roughly a few cents).')) return;
+  tagAbort=false;
+  const bar=document.getElementById('tagProgress');
+  bar.style.display='flex';
+  let done=0;
+  for(let i=0;i<todo.length;i++){
+    if(tagAbort) break;
+    const it=todo[i];
+    bar.querySelector('span').textContent='Tagging '+(i+1)+' / '+todo.length;
+    try{
+      const b64=it.image.split(',')[1];
+      const text=await claudeCall('claude-haiku-4-5-20251001',[
+        {type:'image',source:{type:'base64',media_type:'image/jpeg',data:b64}},
+        {type:'text',text:'Tag this props/set-dressing inventory photo for search. Return ONLY 8-15 lowercase keywords separated by commas: the object type plus every synonym someone might search (e.g. cup, mug, drinkware, tumbler), plus material, color, and style words. No other text.'}
+      ],300);
+      const kws=text.toLowerCase().split(/[,\n]/).map(s=>s.trim().replace(/[^a-z0-9 \-]/g,'')).filter(s=>s&&s.length<30).slice(0,18);
+      if(kws.length){ it.keywords=kws; it.updatedAt=Date.now(); done++; }
+      if(i%5===4) save();
+    }catch(e){
+      console.error('tag failed for',it.id,e);
+      if((e+'').toLowerCase().includes('key')||(e+'').includes('401')){ alert('Tagging stopped: '+e.message); break; }
+    }
+  }
+  save(); render();
+  bar.style.display='none';
+  if(done) console.log('Tagged '+done+' items');
+}
+function stopTagging(){ tagAbort=true; }
+
+// ---- 2) Group sync: shared inventory through the booth server ----
+const SYNC_ON = location.protocol.indexOf('http')===0;
+let syncRev=-1, firstPull=true;
+function setDot(state,txt){
+  const d=document.getElementById('syncDot'); if(!d) return;
+  d.style.color = state==='ok' ? 'var(--green)' : (state==='off' ? 'var(--muted)' : 'var(--red)');
+  d.textContent='● '+txt;
+}
+function mergeItems(serverItems){
+  const map={}; items.forEach(it=>{ map[it.id]=it; });
+  let changed=false;
+  serverItems.forEach(s=>{
+    if(!s||!s.id) return;
+    const l=map[s.id];
+    if(!l){ items.push(s); changed=true; }
+    else if((s.updatedAt||0)>(l.updatedAt||0)){ Object.assign(l,s); changed=true; }
+  });
+  return changed;
+}
+async function syncPull(){
+  if(!SYNC_ON) return;
+  try{
+    const r=await fetch('/api/inventory?rev='+syncRev);
+    if(!r.ok) throw new Error('http '+r.status);
+    const data=await r.json();
+    setDot('ok','synced');
+    if(data.unchanged) return;
+    if(document.querySelector('.overlay.open')) return; // don't clobber while someone is editing
+    if((!data.items||!data.items.length) && items.length){ syncRev=data.rev; syncPush(); return; }
+    const changed=mergeItems(data.items||[]); if(firstPull){ firstPull=false; try{ localStorage.setItem(KEY,JSON.stringify(items)); }catch(e){} render(); }
+    syncRev=data.rev;
+    if(changed){
+      try{ localStorage.setItem(KEY,JSON.stringify(items)); }catch(e){}
+      render();
+    }
+  }catch(e){ setDot('err','offline'); }
+}
+async function syncPush(){
+  if(!SYNC_ON) return;
+  try{
+    const r=await fetch('/api/inventory',{method:'PUT',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({items:items})});
+    if(r.ok){ const d=await r.json(); syncRev=d.rev; setDot('ok','synced'); }
+  }catch(e){ setDot('err','offline'); }
+}
+// every local save also pushes to the group
+if(typeof save==='function'){ const _save=save; save=function(){ _save(); syncPush(); }; }
+if(SYNC_ON){ syncPull(); setInterval(syncPull,4000); } else { setDot('off','local only'); }
+
+// ---- 3) AI brand recommendations: type a brand, get a booth plan from inventory ----
+function openBrand(){
+  document.getElementById('brandOverlay').classList.add('open');
+  document.getElementById('brandResults').innerHTML='';
+  document.getElementById('brandName').focus();
+}
+function closeBrand(){ document.getElementById('brandOverlay').classList.remove('open'); }
+async function runBrand(){
+  const brand=document.getElementById('brandName').value.trim();
+  const notes=document.getElementById('brandNotes').value.trim();
+  const out=document.getElementById('brandResults');
+  if(!brand){ out.innerHTML='<div class="sub">Type a brand name first.</div>'; return; }
+  if(!getApiKey()){ setApiKey(); if(!getApiKey()) return; }
+  out.innerHTML='<div class="sub">Thinking… designing a booth for '+esc(brand)+'…</div>';
+  const inv=items.filter(it=>!it.deleted&&it.status!=='taken').map(it=>
+    it.id+'|'+it.name+'|'+(it.type||'')+'|'+(it.color||'')+'|qty '+(it.qty||1)+'|'+((it.keywords||[]).slice(0,8).join(' '))
+  ).join('\n');
+  try{
+    const text=await claudeCall('claude-sonnet-5',[{type:'text',text:
+      'You are an expert set dresser planning a livestream/event booth for the brand "'+brand+'". '+
+      (notes?('Extra context: '+notes+'. '):'')+
+      'Consider the brand\'s aesthetic, colors, audience and product category. Below is our available prop inventory (id|name|type|color|qty|keywords):\n\n'+inv+
+      '\n\nPick the items that best fit this brand\'s booth. Return ONLY valid JSON, no markdown: '+
+      '{"theme":"1-2 sentence booth concept","picks":[{"id":"inv_...","reason":"short reason"}],"buy":["gap item worth sourcing","..."]}. Pick 8-15 items.'}],2500);
+    const m=text.match(/\{[\s\S]*\}/);
+    const plan=JSON.parse(m?m[0]:text);
+    let html='<h3 style="margin:0 0 8px;font-size:1em">🎨 Concept</h3><div class="sub" style="margin-bottom:14px">'+esc(plan.theme||'')+'</div>';
+    const picks=(plan.picks||[]).filter(p=>items.find(x=>x.id===p.id));
+    html+='<h3 style="margin:0 0 8px;font-size:1em">✅ From your inventory ('+picks.length+')</h3>';
+    picks.forEach(p=>{
+      const it=items.find(x=>x.id===p.id);
+      const thumb=it.image?('<img class="thumb" src="'+it.image+'" style="width:3em;height:3em">'):'<span class="thumb-ph">📦</span>';
+      html+='<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)">'+thumb+
+        '<div style="flex:1"><div class="name">'+esc(it.name)+'</div><div class="sub">'+esc(p.reason||'')+'</div></div>'+
+        '<button class="ghost" onclick="closeBrand();openForm(\''+it.id+'\')">View</button></div>';
+    });
+    if(plan.buy&&plan.buy.length){
+      html+='<h3 style="margin:16px 0 8px;font-size:1em">🛒 Worth sourcing</h3>'+
+        plan.buy.map(b=>'<div class="sub" style="padding:3px 0">• '+esc(b)+'</div>').join('');
+    }
+    out.innerHTML=html;
+  }catch(e){
+    out.innerHTML='<div class="sub" style="color:var(--red)">Failed: '+esc(e.message||String(e))+'</div>';
+  }
+}
+document.getElementById('brandOverlay').addEventListener('click',e=>{ if(e.target.id==='brandOverlay') closeBrand(); });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeBrand(); });
+</script>
+
+</body>
+</html>
